@@ -1,0 +1,149 @@
+/* test driver program for 1D matrix transpose */
+#include "mpi.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+extern int transpose1d(int *a, int n, int blockdim, MPI_Comm comm);
+
+int main (int argc, char *argv[])
+{
+int *rbuf;
+int   numtasks, taskid;
+int i, j, k ,n, nlocal; 
+int *alocal;
+int offset;
+int checkrank = 0;
+
+MPI_Init(&argc, &argv);
+MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
+MPI_Comm_rank(MPI_COMM_WORLD,&taskid);
+
+if (argc != 2) {
+   if (taskid == 0) {
+     fprintf(stderr, "Usage: %s <n>\n", argv[0]);
+     fprintf(stderr, "where n is a multiple of the number of tasks.\n");
+   }   
+   MPI_Finalize();
+   exit(0);
+}
+
+/* Read row/column dimension from command line */
+n = atoi(argv[1]);
+
+if (n%numtasks) {
+   if (taskid == 0) {
+     fprintf(stderr, "Usage: %s <n>\n", argv[0]);
+     fprintf(stderr, "where n is a multiple of the number of tasks.\n");
+   }   
+   MPI_Finalize();
+   exit(0);
+}
+
+nlocal = n/numtasks;
+
+/* Allocate local row block */
+alocal = (int *) malloc(n*nlocal*sizeof(int));
+
+/* Initialize local block */
+offset = taskid*n*nlocal;
+for (i = 0; i < nlocal; i++)
+   for (j = 0; j < n; j++)
+       alocal[i*n + j] = offset + i*n + j + 1;
+
+if (taskid == checkrank) {
+   printf("process %d local block before transpose\n", taskid);
+   for (i = 0; i < nlocal; i++) {
+       for (j = 0; j < n; j++) 
+            printf("%10d ", alocal[i*n + j]);
+       printf("\n");
+   }
+}
+
+
+
+transpose1d(alocal, n, nlocal, MPI_COMM_WORLD);
+
+
+/*my addition to main code start*/
+MPI_Barrier( MPI_COMM_WORLD );
+
+
+
+
+/*Gathering all data*/
+if (taskid == 0) 
+rbuf=(int*)malloc(n*n*sizeof(int));
+
+
+MPI_Gather( alocal, n* nlocal, MPI_INT, rbuf, n* nlocal, MPI_INT, 0, MPI_COMM_WORLD);
+MPI_Barrier( MPI_COMM_WORLD );
+
+
+
+
+/* arrange the data */
+if (taskid == 0) {
+int row,col;
+alocal=(int*)malloc(n*n*sizeof(int));
+for (k=0; k<numtasks;k++)
+for(i=0; i<nlocal*n; i++)
+{row=i/nlocal;
+col=i%nlocal;
+ alocal[row*n+k*nlocal+col]=rbuf[k*n*nlocal+i];
+}
+}
+
+/*my addition to main code end*/
+
+
+
+
+
+if (taskid == checkrank) {
+   printf("process %d local block after transpose\n", taskid);
+   for (i = 0; i < nlocal; i++) {
+       for (j = 0; j < n; j++) 
+            printf("%10d ", alocal[i*n + j]);
+       printf("\n");
+   }
+}
+
+MPI_Finalize();
+return(0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int transpose1d(int *a, int n, int blockdim, MPI_Comm comm) 
+
+{
+ 
+int end,i,j,k,temp;
+
+for (i=0;i<n-1;i++)
+for (j=1;j<blockdim;j++)
+{temp=a[(i*blockdim + j*(n-i))];
+end=i*blockdim+(j-1);
+for (k=(i*blockdim + j*(n-i));k>end;k--)
+a[k]=a[k-1];
+a[end+1]=temp;
+}
+
+
+    return(0);
+}
+ 
+
